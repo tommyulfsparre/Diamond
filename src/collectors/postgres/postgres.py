@@ -162,6 +162,18 @@ class QueryStats(object):
         for data_point in self.data:
             yield (self.path % data_point, data_point['value'])
 
+class CacheHitRate(QueryStats):
+    """
+    Database Cache hit rate
+    """
+    path = "%(datname)s.tables.%(schemaname)s.%(relname)s.%(metric)s"
+    multi_db = True
+    query = """
+	SELECT 
+  		100 * sum(sum(heap_blks_hit)) /
+		 (sum(heap_blks_hit) + sum(heap_blks_read)) as cachehitrate
+	FROM pg_statio_user_tables;
+    """
 
 class DatabaseStats(QueryStats):
     """
@@ -182,6 +194,7 @@ class DatabaseStats(QueryStats):
                pg_stat_database.tup_updated as tup_updated,
                pg_stat_database.tup_deleted as tup_deleted,
                pg_stat_database.conflicts as conflicts,
+               pg_stat_database.temp_files as temp_files,
                pg_database_size(pg_database.datname) AS size
         FROM pg_database
         JOIN pg_stat_database
@@ -440,6 +453,7 @@ registry = {
         DatabaseConnectionCount,
     ),
     'extended': (
+	CacheHitRate,
         DatabaseStats,
         DatabaseConnectionCount,
         UserTableStats,
