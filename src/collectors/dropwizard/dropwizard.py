@@ -10,6 +10,7 @@ Collect [dropwizard](http://dropwizard.codahale.com/) stats for the local node
 """
 
 import urllib2
+import httplib
 
 try:
     import json
@@ -26,8 +27,10 @@ class DropwizardCollector(diamond.collector.Collector):
         config_help = super(DropwizardCollector,
                             self).get_default_config_help()
         config_help.update({
-            'host': "",
-            'port': "",
+            'host': "Hostname",
+            'port': "Port number",
+            'url_path': "Servlet url",
+            'secure': "Enable https"
         })
         return config_help
 
@@ -37,9 +40,12 @@ class DropwizardCollector(diamond.collector.Collector):
         """
         config = super(DropwizardCollector, self).get_default_config()
         config.update({
-            'host':     '127.0.0.1',
-            'port':     9091,
-            'path':     'dropwizard',
+            'timed':    ''
+            'host':	'127.0.0.1',
+            'port':	9091,
+            'path':	'dropwizard',
+            'secure':	False,
+            'url_path': 'metrics',
             'timed':    ''
         })
         return config
@@ -48,18 +54,34 @@ class DropwizardCollector(diamond.collector.Collector):
         if json is None:
             self.log.error('Unable to import json')
             return {}
-        url = 'http://%s:%i/metrics' % (
-            self.config['host'], int(self.config['port']))
+	if self.config['secure']:
+		proto = "https"
+	else:
+		proto = "http"
+
+        url = '%s://%s:%i/%s' % (
+		proto,
+		self.config['host'],
+		int(self.config['port']),
+		self.config['url_path']
+	)
+
         try:
             response = urllib2.urlopen(url)
         except urllib2.HTTPError, err:
-            self.log.error("%s: %s", url, err)
+            self.log.error("HTTPError: %s, %s", url, err)
+            return
+	except urllib2.URLError, err:
+            self.log.error("URLError %s, %s", url, err)
+            return
+	except httplib.HTTPException, err:
+            self.log.error("HTTPException %s, %s", url, err)
             return
 
         try:
             result = json.load(response)
         except (TypeError, ValueError):
-            self.log.error("Unable to parse response from dropwizard as a"
+            self.log.error("Unable to parse response from metrics servlet as a"
                            + " json object")
             return
 
