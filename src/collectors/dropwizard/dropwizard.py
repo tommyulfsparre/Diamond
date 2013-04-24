@@ -19,6 +19,7 @@ except ImportError:
     import simplejson as json
 
 import diamond.collector
+from diamond.collector import str_to_bool
 
 
 class DropwizardCollector(diamond.collector.Collector):
@@ -43,7 +44,7 @@ class DropwizardCollector(diamond.collector.Collector):
             'host':	'127.0.0.1',
             'port':	8081,
             'path':	'dropwizard',
-            'secure':	False,
+            'secure':	'False',
             'url_path': 'metrics'
         })
         return config
@@ -52,7 +53,7 @@ class DropwizardCollector(diamond.collector.Collector):
         if json is None:
             self.log.error('Unable to import json')
             return {}
-	if self.config['secure']:
+	if str_to_bool(self.config['secure']):
 		proto = "https"
 	else:
 		proto = "http"
