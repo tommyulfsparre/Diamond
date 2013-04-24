@@ -166,11 +166,11 @@ class CacheHitRate(QueryStats):
     """
     Database Cache hit rate
     """
-    path = "%(datname)s.tables.%(schemaname)s.%(relname)s.%(metric)s"
+    path = "database.%(datname)s.%(metric)s"
     multi_db = True
     query = """
 	SELECT 
-  		100 * sum(sum(heap_blks_hit)) /
+  		100 * sum(heap_blks_hit) /
 		 (sum(heap_blks_hit) + sum(heap_blks_read)) as cachehitrate
 	FROM pg_statio_user_tables;
     """
