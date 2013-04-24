@@ -19,6 +19,7 @@ except ImportError:
     import simplejson as json
 
 import diamond.collector
+from diamond.collector import str_to_bool
 
 
 class DropwizardCollector(diamond.collector.Collector):
@@ -43,11 +44,11 @@ class DropwizardCollector(diamond.collector.Collector):
             'host':	'127.0.0.1',
             'port':	9091,
             'path':	'dropwizard',
-            'secure':	False,
+            'secure':	'False',
             'url_path': 'metrics',
-	    'collect_jvm': True,
-	    'collect_jetty': True,
-            'collect_logback': True,
+	    'collect_jvm': 'True',
+	    'collect_jetty': 'True',
+            'collect_logback': 'True',
             'timed':    ''
         })
         return config
@@ -56,7 +57,7 @@ class DropwizardCollector(diamond.collector.Collector):
         if json is None:
             self.log.error('Unable to import json')
             return {}
-	if self.config['secure']:
+	if str_to_bool(self.config['secure']):
 		proto = "https"
 	else:
 		proto = "http"
@@ -90,21 +91,21 @@ class DropwizardCollector(diamond.collector.Collector):
         metrics = {}
 
 	# Jetty metrics	
-	if self.config['collect_jetty']:
+	if str_to_bool(self.config['collect_jetty']):
         	jetty = result['org.eclipse.jetty.servlet.ServletContextHandler']
         	metrics['org.eclipse.jetty.servlet.ServletContextHandler.2xx-responses.1MinuteRate'] = jetty['2xx-responses']['m1']
         	metrics['org.eclipse.jetty.servlet.ServletContextHandler.4xx-responses.1MinuteRate'] = jetty['4xx-responses']['m1']
         	metrics['org.eclipse.jetty.servlet.ServletContextHandler.5xx-responses.1MinuteRate'] = jetty['5xx-responses']['m1']
 
 	# Logback metrics	
-	if self.config['collect_logback']:
+	if str_to_bool(self.config['collect_logback']):
         	logback = result['ch.qos.logback.core.Appender']
         	metrics['ch.qos.logback.core.Appender.info.1MinuteRate'] = logback['info']['m1']
         	metrics['ch.qos.logback.core.Appender.warn.1MinuteRate'] = logback['warn']['m1']
         	metrics['ch.qos.logback.core.Appender.error.1MinuteRate'] = logback['error']['m1']
 
 	# JVM metrics
-	if self.config['collect_jvm']:
+	if str_to_bool(self.config['collect_jvm']):
         	memory = result['jvm']['memory']
         	mempool = memory['memory_pool_usages']
         	jvm = result['jvm']
