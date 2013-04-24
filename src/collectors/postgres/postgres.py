@@ -454,11 +454,11 @@ class TupleAccessStats(QueryStats):
 
 registry = {
     'basic': (
+	CacheHitRate,
         DatabaseStats,
         DatabaseConnectionCount,
     ),
     'extended': (
-	CacheHitRate,
         DatabaseStats,
         DatabaseConnectionCount,
         UserTableStats,
