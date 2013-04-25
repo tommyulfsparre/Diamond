@@ -169,13 +169,16 @@ class CacheHitRate(QueryStats):
     path = "database.%(datname)s.%(metric)s"
     multi_db = True
     query = """
-	SELECT 
-  		100 * sum(heap_blks_hit) /
-		 NULLIF(
-		(sum(heap_blks_hit) + sum(heap_blks_read)),
-		0) 
-		as cachehitrate
-	FROM pg_statio_user_tables;
+        SELECT
+                COALESCE (
+                        100 * sum(heap_blks_hit) /
+                        NULLIF(
+                        (sum(heap_blks_hit) + sum(heap_blks_read)),
+                        0),
+                        0
+                )
+                as cachehitrate
+        FROM pg_statio_user_tables;
     """
 
 class DatabaseStats(QueryStats):
