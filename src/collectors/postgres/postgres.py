@@ -171,7 +171,10 @@ class CacheHitRate(QueryStats):
     query = """
 	SELECT 
   		100 * sum(heap_blks_hit) /
-		 (sum(heap_blks_hit) + sum(heap_blks_read)) as cachehitrate
+		 NULLIF(
+		(sum(heap_blks_hit) + sum(heap_blks_read)),
+		0) 
+		as cachehitrate
 	FROM pg_statio_user_tables;
     """
 
