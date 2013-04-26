@@ -157,7 +157,7 @@ class DropwizardCollector(diamond.collector.Collector):
 	if self.config['timed']:
 		for stat in self.config['timed'].split(" "):
 			for resource in result[stat]:
-				metrics['.'.join([stat, resource, "duration", "mean"])] = result[stat][resource]['duration']['median']
+				metrics['.'.join([stat, resource, "duration", "median"])] = result[stat][resource]['duration']['median']
 				metrics['.'.join([stat, resource, "duration", "p98"])] = result[stat][resource]['duration']['p98']
 				metrics['.'.join([stat, resource, "rate", "1MinuteRate"])] = result[stat][resource]['rate']['m1']
 
