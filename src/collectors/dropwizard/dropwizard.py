@@ -127,9 +127,27 @@ class DropwizardCollector(diamond.collector.Collector):
         	metrics['jvm.memory.non_heap_usage'] = memory['non_heap_usage']
 
         	metrics['jvm.memory.code_cache'] = mempool['Code Cache']
-        	metrics['jvm.memory.eden_space'] = mempool['Eden Space']
-        	metrics['jvm.memory.perm_gen'] = mempool['Perm Gen']
-        	metrics['jvm.memory.survivor_space'] = mempool['Survivor Space']
+
+		if 'Eden Space' in mempool:
+        		metrics['jvm.memory.eden_space'] = mempool['Eden Space']
+		elif 'PS Eden Space' in mempool:
+        		metrics['jvm.memory.eden_space'] = mempool['PS Eden Space']
+		else:
+			metrics['jvm.memory.eden_space'] = 0
+
+		if 'Perm Gen' in mempool:
+			metrics['jvm.memory.perm_gen'] = mempool['Perm Gen']
+		elif 'PS Perm Gen' in mempool:
+			metrics['jvm.memory.perm_gen'] = mempool['PS Perm Gen']
+		else:
+			metrics['jvm.memory.perm_gen'] = 0
+
+		if 'Survivor Space' in mempool:
+			metrics['jvm.memory.survivor_space'] = mempool['Survivor Space']
+		elif 'PS Survivor Space' in mempool:
+			metrics['jvm.memory.survivor_space'] = mempool['PS Survivor Space']
+		else:
+			metrics['jvm.memory.survivor_space'] = 0
 
         	metrics['jvm.daemon_thread_count'] = jvm['daemon_thread_count']
         	metrics['jvm.thread_count'] = jvm['thread_count']
