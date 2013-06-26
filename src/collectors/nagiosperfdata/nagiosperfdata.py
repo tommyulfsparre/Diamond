@@ -41,7 +41,7 @@ class NagiosPerfdataCollector(diamond.collector.Collector):
     def get_default_config(self):
         config = super(NagiosPerfdataCollector, self).get_default_config()
         config.update({
-            'enabled': 'True',
+            'enabled': 'False',
             'path': 'nagiosperfdata',
             'perfdata_dir': '/var/spool/diamond/nagiosperfdata',
             'method': 'Threaded'
@@ -58,6 +58,7 @@ class NagiosPerfdataCollector(diamond.collector.Collector):
         except OSError:
             self.log.error("Cannot read directory `{dir}'".format(
                     dir=perfdata_dir))
+            return
 
         for filename in filenames:
             self._process_file(os.path.join(perfdata_dir, filename))

@@ -11,6 +11,7 @@ values are ignored.
 """
 
 import diamond.collector
+from diamond.collector import str_to_bool
 import re
 
 try:
@@ -35,15 +36,22 @@ class MongoDBCollector(diamond.collector.Collector):
     def get_default_config_help(self):
         config_help = super(MongoDBCollector, self).get_default_config_help()
         config_help.update({
-            'hosts': 'Array of hostname(:port) elements to get metrics from',
+            'hosts': 'Array of hostname(:port) elements to get metrics from'
+                     'Set an alias by prefixing host:port with alias@',
             'host': 'A single hostname(:port) to get metrics from'
                     ' (can be used instead of hosts and overrides it)',
+            'user': 'Username for authenticated login (optional)',
+            'passwd': 'Password for authenticated login (optional)',
             'databases': 'A regex of which databases to gather metrics for.'
                          ' Defaults to all databases.',
             'ignore_collections': 'A regex of which collections to ignore.'
                                   ' MapReduce temporary collections (tmp.mr.*)'
                                   ' are ignored by default.',
-
+            'network_timeout': 'Timeout for mongodb connection (in seconds).'
+                               ' There is no timeout by default.',
+            'simple': 'Only collect the same metrics as mongostat.',
+            'translate_collections': 'Translate dot (.) to underscores (_)'
+                                     ' in collection names.'
         })
         return config_help
 
@@ -55,8 +63,13 @@ class MongoDBCollector(diamond.collector.Collector):
         config.update({
             'path':      'mongo',
             'hosts':     ['localhost'],
+            'user':      None,
+            'passwd':      None,
             'databases': '.*',
             'ignore_collections': '^tmp\.mr\.',
+            'network_timeout': None,
+            'simple': 'False',
+            'translate_collections': 'False'
         })
         return config
 
@@ -65,32 +78,74 @@ class MongoDBCollector(diamond.collector.Collector):
 
         if pymongo is None:
             self.log.error('Unable to import pymongo')
-            return {}
+            return
 
         # we need this for backwards compatibility
         if 'host' in self.config:
             self.config['hosts'] = [self.config['host']]
+
+        # convert network_timeout to integer
+        if self.config['network_timeout']:
+            self.config['network_timeout'] = int(
+                self.config['network_timeout'])
+
+        # use auth if given
+        if 'user' in self.config:
+            user = self.config['user']
+        else:
+            user = None
+
+        if 'passwd' in self.config:
+            passwd = self.config['passwd']
+        else:
+            passwd = None
 
         for host in self.config['hosts']:
             if len(self.config['hosts']) == 1:
                 # one host only, no need to have a prefix
                 base_prefix = []
             else:
-                base_prefix = [re.sub('[:\.]', '_', host)]
+                matches = re.search('((.+)\@)?(.+)?', host)
+                alias = matches.group(2)
+                host = matches.group(3)
+
+                if alias is None:
+                    base_prefix = [re.sub('[:\.]', '_', host)]
+                else:
+                    base_prefix = [alias]
 
             try:
                 if ReadPreference is None:
-                    conn = pymongo.Connection(host)
+                    conn = pymongo.Connection(
+                        host,
+                        network_timeout=self.config['network_timeout'],
+                        slave_okay=True
+                    )
                 else:
                     conn = pymongo.Connection(
                         host,
-                        read_preference=ReadPreference.SECONDARY)
+                        network_timeout=self.config['network_timeout'],
+                        read_preference=ReadPreference.SECONDARY,
+                    )
             except Exception, e:
                 self.log.error('Couldnt connect to mongodb: %s', e)
-                return {}
+                continue
+
+            # try auth
+            if user:
+                try:
+                    conn.admin.authenticate(user, passwd)
+                except Exception, e:
+                    self.log.error('User auth given, but could not autheticate'
+                                   + ' with host: %s, err: %s' % (host, e))
+                    return{}
+
             data = conn.db.command('serverStatus')
-            self._publish_dict_with_prefix(data, base_prefix)
             self._publish_transformed(data, base_prefix)
+            if str_to_bool(self.config['simple']):
+                data = self._extract_simple_data(data)
+
+            self._publish_dict_with_prefix(data, base_prefix)
             db_name_filter = re.compile(self.config['databases'])
             ignored_collections = re.compile(self.config['ignore_collections'])
             for db_name in conn.database_names():
@@ -104,6 +159,8 @@ class MongoDBCollector(diamond.collector.Collector):
                         continue
                     collection_stats = conn[db_name].command('collstats',
                                                              collection_name)
+                    if str_to_bool(self.config['translate_collections']):
+                        collection_name = collection_name.replace('.', '_')
                     collection_prefix = db_prefix + [collection_name]
                     self._publish_dict_with_prefix(collection_stats,
                                                    collection_prefix)
@@ -138,7 +195,7 @@ class MongoDBCollector(diamond.collector.Collector):
 
         def compute_interval(data, total_name):
             current_total = get_dotted_value(data, total_name)
-            total_key = '.'.join(base_prefix) + '.' + total_name
+            total_key = '.'.join(base_prefix + [total_name])
             last_total = self.__totals.get(total_key, current_total)
             interval = current_total - last_total
             self.__totals[total_key] = current_total
@@ -147,7 +204,7 @@ class MongoDBCollector(diamond.collector.Collector):
         def publish_percent(value_name, total_name, data):
             value = float(get_dotted_value(data, value_name) * 100)
             interval = compute_interval(data, total_name)
-            key = '.'.join(base_prefix) + '.percent.' + value_name
+            key = '.'.join(base_prefix + ['percent', value_name])
             self.publish_counter(key, value, time_delta=bool(interval),
                                  interval=interval)
 
@@ -160,7 +217,7 @@ class MongoDBCollector(diamond.collector.Collector):
             if '.' in locks:
                 locks['_global_'] = locks['.']
                 del (locks['.'])
-            key_prefix = '.'.join(base_prefix) + '.percent.'
+            key_prefix = '.'.join(base_prefix + ['percent'])
             db_name_filter = re.compile(self.config['databases'])
             interval = compute_interval(data, 'uptimeMillis')
             for db_name in locks:
@@ -174,9 +231,10 @@ class MongoDBCollector(diamond.collector.Collector):
                     '.%s.timeLockedMicros.R' % db_name)
                 value = float(r + R) / 10
                 if value:
-                    self.publish_counter(key_prefix + 'locks.%s.read' % db_name,
-                                         value, time_delta=bool(interval),
-                                         interval=interval)
+                    self.publish_counter(
+                        key_prefix + '.locks.%s.read' % db_name,
+                        value, time_delta=bool(interval),
+                        interval=interval)
                 w = get_dotted_value(
                     locks,
                     '%s.timeLockedMicros.w' % db_name)
@@ -186,7 +244,7 @@ class MongoDBCollector(diamond.collector.Collector):
                 value = float(w + W) / 10
                 if value:
                     self.publish_counter(
-                        key_prefix + 'locks.%s.write' % db_name,
+                        key_prefix + '.locks.%s.write' % db_name,
                         value, time_delta=bool(interval), interval=interval)
 
     def _publish_dict_with_prefix(self, dict, prefix, publishfn=None):
@@ -208,3 +266,10 @@ class MongoDBCollector(diamond.collector.Collector):
             publishfn('.'.join(keys), value)
         elif isinstance(value, long):
             publishfn('.'.join(keys), float(value))
+
+    def _extract_simple_data(self, data):
+        return {
+            'connections': data.get('connections'),
+            'globalLock': data.get('globalLock'),
+            'indexCounters': data.get('indexCounters')
+        }

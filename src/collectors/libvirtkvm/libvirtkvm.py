@@ -10,8 +10,18 @@ Uses libvirt to harvest per KVM instance stats
 """
 
 import diamond.collector
-import libvirt
-from xml.etree import ElementTree
+
+try:
+    from xml.etree import ElementTree
+    ElementTree  # workaround for pyflakes issue #13
+except ImportError:
+    import cElementTree as ElementTree
+
+try:
+    import libvirt
+    libvirt  # Pyflakes
+except ImportError:
+    libvirt = None
 
 
 class LibvirtKVMCollector(diamond.collector.Collector):
@@ -87,6 +97,10 @@ as cummulative nanoseconds since VM creation if this is True."""
         self.publish(statname, metric, instance=instance)
 
     def collect(self):
+        if libvirt is None:
+            self.log.error('Unable to import libvirt')
+            return {}
+
         conn = libvirt.openReadOnly(self.config['uri'])
         for dom in [conn.lookupByID(n) for n in conn.listDomainsID()]:
             name = dom.name()
